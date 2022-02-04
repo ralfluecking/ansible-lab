@@ -1,0 +1,17 @@
+---
+- name: Playbook to print the list of upgradable packages (without updating the inventory)
+  hosts: linux
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: List all upgradable packages (Debuntu boxes)
+      ansible.builtin.command: 
+        apt list --upgradable
+      register: upgradables
+      when: ansible_os_family == 'Debian'
+
+    - name: print upgradable packages
+      debug: var=upgradables.stdout_lines
+      when: ansible_os_family == 'Debian'
+...

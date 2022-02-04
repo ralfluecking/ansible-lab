@@ -1,0 +1,80 @@
+---
+- name: Playbook to ensure only security related apt-repositories are configured (Debuntu)
+  hosts: linux
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+
+    - block:
+
+      - name: Print host distro details
+        ansible.builtin.debug:
+          msg: 
+            - "Host: {{ inventory_hostname }} with Distro: {{ ansible_distribution }} ({{ ansible_distribution_file_variety }})"
+            - "OS.Version: {{ ansible_distribution_version }} ({{ ansible_lsb.codename | default('default_value') | lower }})"
+            - "Architecture: {{ ansible_architecture }}"
+            - "Kernel: {{ ansible_kernel }}, Version: {{ ansible_kernel_version }}"
+            - "Memory [GB]: Free: {{ ansible_memfree_mb/1024 }}, Total: {{ ansible_memtotal_mb/1024 }}"
+            - "Host.Name: {{ ansible_hostname }},  Host.Ipv4: {{ ansible_all_ipv4_addresses }}"
+             
+      - name: Get content of sources.list
+        ansible.builtin.shell:
+          cat '/etc/apt/sources.list'
+        register: output
+      
+      - name: show content of sources.list
+        debug: var=output.stdout_lines
+    
+    
+      - name: Remove sources.list file
+        file:
+          path: "/etc/apt/sources.list"
+          state: absent
+    
+      # https://wiki.ubuntuusers.de/sources.list/
+      - name: Add security relevant Ubuntu package repositories into sources.list
+        ansible.builtin.lineinfile:
+          path: /etc/apt/sources.list
+          line: "{{ item }}"
+          create: yes
+          owner: root
+          group: root
+          mode: '0644'
+        loop:
+          - "deb http://archive.ubuntu.com/ubuntu/   {{ ansible_lsb.codename|lower }}          main restricted universe multiverse"
+          - "deb http://security.ubuntu.com/ubuntu/  {{ ansible_lsb.codename|lower }}-security main restricted universe multiverse"  
+          - "deb http://archive.ubuntu.com/ubuntu/   {{ ansible_lsb.codename|lower }}-updates  main restricted universe multiverse"
+        when: ansible_distribution == 'Ubuntu'
+    
+      # https://www.debian.org/security/      
+      - name: Add security relevant Debian (i.e. 11 bullseye) repositories into sources.list
+        ansible.builtin.lineinfile:
+          path: /etc/apt/sources.list
+          line: "{{ item }}"
+          create: yes
+          owner: root
+          group: root
+          mode: '0644'
+        loop:
+          - "deb http://deb.debian.org/debian                {{ ansible_lsb.codename|lower }}          main"
+          - "deb http://security.debian.org/debian-security  {{ ansible_lsb.codename|lower }}-security main"
+          - "deb http://deb.debian.org/debian                {{ ansible_lsb.codename|lower }}-updates  main"
+        when: ansible_distribution == 'Debian' 
+
+#    - name: Include ansible-apt-sources
+#      include_role:
+#        name: ansible-apt-sources
+#      when:  ansible_os_family == "Debian"
+
+      - name: Get content of sources.list
+        ansible.builtin.shell:
+          cat '/etc/apt/sources.list'
+        register: output
+      
+      - name: show content of sources.list
+        debug: var=output.stdout_lines
+
+      when: ansible_os_family == 'Debian' 
+
+...

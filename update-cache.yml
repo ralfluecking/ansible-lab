@@ -1,0 +1,36 @@
+---
+- name: Playbook to perform apt cache update and list upgradables
+  hosts: linux
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    # Use a block to perform tasks conditionally—only if running Debian or Ubuntu
+    - block:     
+
+      - name: Get content of sources.list
+        ansible.builtin.shell:
+          cat '/etc/apt/sources.list'
+        register: output
+
+      - name: print the content of sources.list
+        debug: var=output.stdout_lines        
+
+      - name: Update repository index (Debuntu boxes)
+        ansible.builtin.apt:
+         update_cache: yes          # apt-get update -y
+         force_apt_get: yes         # use apt instead of aptitude
+        when: ansible_distribution_file_variety == 'Debian' 
+
+      - name: List all upgradable packages (Debuntu boxes)
+        ansible.builtin.command: 
+          apt list --upgradable
+        register: upgradables
+
+      - name: print upgradable packages
+        debug: var=upgradables.stdout_lines
+        when: ansible_distribution_file_variety == 'Debian'
+
+      when:
+        - ansible_os_family == 'Debian'
+...

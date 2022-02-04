@@ -1,6 +1,6 @@
 ---
 - name: Playbook to perform a release upgrade (reboot if required)
-  hosts: ubuntu1
+  hosts: linux
   gather_facts: yes
   become: yes
   
@@ -9,7 +9,7 @@
       ansible.builtin.debug:
         msg: 
           - "Host: {{ inventory_hostname }} with Distro: {{ ansible_distribution }} ({{ ansible_distribution_file_variety }})"
-          - "OS.Version: {{ ansible_distribution_version }} ({{ ansible_lsb.codename|lower }})"
+          - "OS.Version: {{ ansible_distribution_version }} ({{ ansible_lsb.codename | default('default_value') | lower }})"
           - "Architecture: {{ ansible_architecture }}"
           - "Kernel: {{ ansible_kernel }}, Version: {{ ansible_kernel_version }}"
           - "Memory [GB]: Free: {{ ansible_memfree_mb/1024 }}, Total: {{ ansible_memtotal_mb/1024 }}"
@@ -33,7 +33,7 @@
           - /run/motd.dynamic
                       
       
-      - name: Perform a dist-upgrade
+      - name: Update repository index and perform a dist-upgrade
         ansible.builtin.apt: 
           update_cache: yes 
           upgrade: dist
@@ -68,23 +68,21 @@
           pre_reboot_delay: 0 
           post_reboot_delay: 30 
           test_command: uptime
-        when: reboot_required_file.stat.exists == true
+        when: reboot_required_file.stat is defined and reboot_required_file.stat.exists == true
 
       - name: Remove useless apt packages from cache (Debuntu boxes)
         ansible.builtin.apt:
           autoclean: yes
-        when: ansible_distribution_file_variety == 'Debian'
-
+ 
       - name: Remove obsolete apt dependencies (Debuntu boxes)
         ansible.builtin.apt:
           autoremove: yes                     # apt-get autoremove
-        when: ansible_distribution_file_variety == 'Debian'
 
       - name: Print host distro details
         ansible.builtin.debug:
           msg: 
             - "Host: {{ inventory_hostname }} with Distro: {{ ansible_distribution }} ({{ ansible_distribution_file_variety }})"
-            - "OS.Version: {{ ansible_distribution_version }} ({{ ansible_lsb.codename|lower }})"
+            - "OS.Version: {{ ansible_distribution_version }} ({{ ansible_lsb.codename | default('default_value') | lower }})"
             - "Architecture: {{ ansible_architecture }}"
             - "Kernel: {{ ansible_kernel }}, Version: {{ ansible_kernel_version }}"
             - "Memory [GB]: Free: {{ ansible_memfree_mb/1024 }}, Total: {{ ansible_memtotal_mb/1024 }}"
