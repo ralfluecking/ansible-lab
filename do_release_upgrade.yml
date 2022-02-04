@@ -1,0 +1,101 @@
+---
+- name: Playbook to perform a release upgrade (reboot if required)
+  hosts: ubuntu1
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: Print host distro details
+      ansible.builtin.debug:
+        msg: 
+          - "Host: {{ inventory_hostname }} with Distro: {{ ansible_distribution }} ({{ ansible_distribution_file_variety }})"
+          - "OS.Version: {{ ansible_distribution_version }} ({{ ansible_lsb.codename|lower }})"
+          - "Architecture: {{ ansible_architecture }}"
+          - "Kernel: {{ ansible_kernel }}, Version: {{ ansible_kernel_version }}"
+          - "Memory [GB]: Free: {{ ansible_memfree_mb/1024 }}, Total: {{ ansible_memtotal_mb/1024 }}"
+          - "Host.Name: {{ ansible_hostname }},  Host.Ipv4: {{ ansible_all_ipv4_addresses }}"
+            
+    # Use a block to perform tasks conditionally—only if running Debian or Ubuntu
+    - block:
+
+      - debug:
+          msg: "This server is running {{ ansible_distribution }} {{ ansible_distribution_version }} and will be upgraded"
+
+      # TODO: Include an ansible role here : 
+      #       Now would be a good time to take a backup if you can trigger an automated backup!
+
+      - name: Remove the EOL message of the day if one exists
+        file:
+          path: "{{ item }}"
+          state: absent
+        with_items:
+          - /etc/update-motd.d/99-esm
+          - /run/motd.dynamic
+                      
+      
+      - name: Perform a dist-upgrade
+        ansible.builtin.apt: 
+          update_cache: yes 
+          upgrade: dist
+        
+      - name: Ensure that the package update-manager-core is installed
+        ansible.builtin.package:
+          name: update-manager-core
+          state: present
+        
+      - name: Ensure Prompt=normal is set in /etc/update-manager/release-upgrades
+        ansible.builtin.lineinfile:
+          path: /etc/update-manager/release-upgrades
+          regexp: '^Prompt='
+          line: Prompt=normal      
+      
+      - name: Perform do-release-upgrade (this can take a while...)
+        ansible.builtin.command: 
+          do-release-upgrade -f DistUpgradeViewNonInteractive
+        ignore_errors: yes
+         
+      - name: Check if a reboot is required
+        ansible.builtin.stat:
+          path: /var/run/reboot-required
+          get_checksum: no
+        register: reboot_required_file
+        
+      - name: reboot the server (if required)
+        ansible.builtin.reboot:
+          msg: "Reboot initiated by Ansible after OS upgrade" 
+          connect_timeout: 5 
+          reboot_timeout: 300 
+          pre_reboot_delay: 0 
+          post_reboot_delay: 30 
+          test_command: uptime
+        when: reboot_required_file.stat.exists == true
+
+      - name: Remove useless apt packages from cache (Debuntu boxes)
+        ansible.builtin.apt:
+          autoclean: yes
+        when: ansible_distribution_file_variety == 'Debian'
+
+      - name: Remove obsolete apt dependencies (Debuntu boxes)
+        ansible.builtin.apt:
+          autoremove: yes                     # apt-get autoremove
+        when: ansible_distribution_file_variety == 'Debian'
+
+      - name: Print host distro details
+        ansible.builtin.debug:
+          msg: 
+            - "Host: {{ inventory_hostname }} with Distro: {{ ansible_distribution }} ({{ ansible_distribution_file_variety }})"
+            - "OS.Version: {{ ansible_distribution_version }} ({{ ansible_lsb.codename|lower }})"
+            - "Architecture: {{ ansible_architecture }}"
+            - "Kernel: {{ ansible_kernel }}, Version: {{ ansible_kernel_version }}"
+            - "Memory [GB]: Free: {{ ansible_memfree_mb/1024 }}, Total: {{ ansible_memtotal_mb/1024 }}"
+            - "Host.Name: {{ ansible_hostname }},  Host.Ipv4: {{ ansible_all_ipv4_addresses }}"
+            
+      
+      when:
+        - ansible_os_family == 'Debian'
+
+...
+# After the playbook is finished, it's a good idea to confirm all the servers
+# are actually upgraded. Run something like:
+#     ansible [group] -a "lsb_release -a"
+# https://www.jeffgeerling.com/blog/2018/ansible-playbook-upgrade-all-ubuntu-1204-lts-hosts-1404-or-1604-1804-etc
