@@ -1,0 +1,52 @@
+---
+- name: Playbook to print some details about the distro (performs apt-get update)
+  hosts: ubuntus
+  gather_facts: yes
+  become: yes
+  
+  tasks:
+    - name: Print host distro details
+      ansible.builtin.debug:
+        msg: 
+          - "Host: {{ inventory_hostname }} has Distro: {{ ansible_distribution }} ({{ ansible_distribution_file_variety }})"
+          - "OS.Version: {{ ansible_distribution_version }} ({{ ansible_lsb.codename|lower }})"
+          - "Architecture: {{ ansible_architecture }}"
+          - "Kernel: {{ ansible_kernel }}, Version: {{ ansible_kernel_version }}"
+          - "Memory.Free [GB]: {{ ansible_memfree_mb/1024 }}, Memory.Total [GB]: {{ ansible_memtotal_mb/1024 }}"
+          - "Host.Name: {{ ansible_hostname }},  Host.Ipv4: {{ ansible_all_ipv4_addresses }}"
+             
+    - name: Get content of sources.list
+      ansible.builtin.shell:
+        cat '/etc/apt/sources.list'
+      register: output
+      
+    - name: print the content of sources.list
+      debug: var=output.stdout_lines        
+        
+    - name: Perform an apt repo-update (Debuntu boxes)
+      ansible.builtin.apt:
+       update_cache: yes          # apt-get update -y
+       force_apt_get: yes         # use apt instead of aptitude
+      when: ansible_distribution_file_variety == 'Debian' 
+    
+    - name: List all upgradable packages (Debuntu boxes)
+      ansible.builtin.command: 
+        apt list --upgradable
+      register: upgradables
+
+    - name: print upgradable packages
+      debug: var=upgradables.stdout_lines
+      when: ansible_distribution_file_variety == 'Debian'
+    
+    - name: Check if a reboot is required (Debuntu boxes)
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+        get_checksum: no
+      register: reboot_required_file
+      when: ansible_distribution_file_variety == 'Debian'
+
+    - name: print if a reboot is required
+      ansible.builtin.debug:
+        msg: "Reboot is required!" 
+      when: reboot_required_file.stat.exists == true
+...
